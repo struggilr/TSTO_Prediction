@@ -1,26 +1,9 @@
-# Local CFD data and derived arrays
 datasets/
-*.h5
-*.hdf5
-*.npz
-*.npy
-*.dat
-*.cgns
-
-# Model states, caches, logs and generated evaluation products
 outputs/
-server_package_manifest.json
 *.pt
 *.pth
-*.ckpt
+*.h5
+*.npz
+*.npy
 *.log
-*.pstats
-*.zip
 __pycache__/
-*.py[cod]
-.venv/
-venv/
-
-# Temporary/partial writes
-*.partial
-*.partial.*

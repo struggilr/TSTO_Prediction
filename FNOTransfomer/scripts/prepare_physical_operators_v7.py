@@ -14,8 +14,8 @@ from taoca.physical_supervision_v7 import pack_maps
 from taoca.physics_evaluate import polygons
 OUT=ROOT/'outputs/physical_v7'
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--limit',type=int);p.add_argument('--split',choices=['train','val','all'],default='all');a=p.parse_args();torch.set_num_threads(2);OUT.mkdir(exist_ok=True);folder=OUT/'operators';folder.mkdir(exist_ok=True);heights=[35,35,140,70];motion=FrozenTrajectory(ROOT/'outputs/shared_trajectory/model.json').cuda();count=0
-    contract=dict(heights=heights,stride=4,phase='(lead_index%4,(lead_index//4)%4)',scope='Only train and validation geometry. Operator uses history-only predicted pose, valid triangles and V3 quality fusion; no flow-label-selected queries',source_sha256={s:hashlib.sha256((ROOT/s).read_bytes()).hexdigest() for s in ['taoca/joint.py','taoca/staged.py','taoca/chart_transfer_v3.py','taoca/physical_supervision_v7.py','taoca/allocation_v3.py','taoca/domain_charts.py','datasets/joint_nearest/manifest.json','outputs/shared_trajectory/model.json']})
+    p=argparse.ArgumentParser();p.add_argument('--limit',type=int);p.add_argument('--split',choices=['train','val','all'],default='all');a=p.parse_args();torch.set_num_threads(2);OUT.mkdir(exist_ok=True);folder=OUT/'operators';folder.mkdir(exist_ok=True);heights=[35,35,140,70];motion=FrozenTrajectory(ROOT/'configs/trajectory_model.json').cuda();count=0
+    contract=dict(heights=heights,stride=4,phase='(lead_index%4,(lead_index//4)%4)',scope='Only train and validation geometry. Operator uses history-only predicted pose, valid triangles and V3 quality fusion; no flow-label-selected queries',source_sha256={s:hashlib.sha256((ROOT/s).read_bytes()).hexdigest() for s in ['taoca/joint.py','taoca/staged.py','taoca/chart_transfer_v3.py','taoca/physical_supervision_v7.py','taoca/allocation_v3.py','taoca/domain_charts.py','datasets/joint_nearest/manifest.json','configs/trajectory_model.json']})
     cp=OUT/'operator_contract.json'
     if cp.exists() and json.loads(cp.read_text())!=contract:raise RuntimeError('Cached operator contract changed')
     cp.write_text(json.dumps(contract,indent=2))

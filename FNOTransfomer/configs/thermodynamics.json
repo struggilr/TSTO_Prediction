@@ -1,0 +1,9 @@
+{
+  "gas_constant": 287.0402222272431,
+  "pressure_offset": -0.035779346393376224,
+  "fit": "p = R*rho*T + offset",
+  "nrmse_training_pressure_std": 0.005639532354452885,
+  "enabled": true,
+  "samples": 123106,
+  "scope": "Only chronological training frames; compatibility fit, not independent identification of fluid composition or reference pressure."
+}

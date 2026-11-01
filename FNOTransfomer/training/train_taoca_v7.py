@@ -1,42 +1,45 @@
 """Fine-tune TAOCA through its evaluation inverse; select by validation minimax."""
 import os
 os.environ['MKL_THREADING_LAYER']='GNU'
-import argparse,json,time,random,hashlib
+import argparse,json,time,random,hashlib,sys
 from pathlib import Path
+ROOT=Path(__file__).resolve().parents[1]
+BASE=ROOT/'outputs/physical_v7'
+sys.path.insert(0,str(ROOT))
 import numpy as np
 import torch
 from torch.utils.data import DataLoader,Subset
 from taoca.allocated_data_v3 import AllocatedWindows
-from taoca.metric_model_v8 import MetricPredictor
+from taoca.allocated_model_v3 import AllocatedPredictor
 from taoca.spatial_physics import SpatialPredictor
 from taoca.physics_losses import PhysicsLoss,regional_maps
 from taoca.physical_supervision_v7 import physical_loss,project,load_window
-from train_physics_v2 import atomic_json
-ROOT=Path(__file__).resolve().parent;BASE=ROOT/'outputs/metric_v8'
+def atomic_json(path,data):
+    tmp=path.with_suffix('.partial.json');tmp.write_text(json.dumps(data,indent=2),encoding='utf8');os.replace(tmp,path)
 def forward(model,b):return model(*[b[k] for k in ['history','mach','pose_history','dt','last_xy','templates']],10,'taoca',b['last_base'],b['last_valid'])
 def main():
     p=argparse.ArgumentParser();p.add_argument('--smoke',action='store_true');p.add_argument('--resume',action='store_true');p.add_argument('--epochs',type=int,default=60);a=p.parse_args();torch.set_num_threads(4);random.seed(42);np.random.seed(42);torch.manual_seed(42)
-    assert json.loads((ROOT/'outputs/physical_v7/operator_tests.json').read_text())['verified']
-    if not a.smoke:assert json.loads((ROOT/'outputs/physical_v7/prepare_status.json').read_text())['state']=='complete'
-    heights=[35,35,140,70];folder=BASE/('taoca_smoke' if a.smoke else 'taoca');folder.mkdir(parents=True,exist_ok=True)
+    assert json.loads((BASE/'operator_tests.json').read_text())['verified']
+    if not a.smoke:assert json.loads((BASE/'prepare_status.json').read_text())['state']=='complete'
+    heights=[35,35,140,70];folder=BASE/('taoca_smoke' if a.smoke else 'taoca');folder.mkdir(exist_ok=True)
     ds={s:AllocatedWindows(ROOT/'datasets/joint_nearest',ROOT/'datasets/fenli_paired','taoca',s,heights=heights) for s in ['train','val','test']}
     loaders={s:DataLoader(Subset(d,[0]) if a.smoke else d,batch_size=1,shuffle=s=='train',num_workers=0) for s,d in ds.items()}
-    meta=json.loads((ROOT/'datasets/joint_nearest/manifest.json').read_text());thermo=json.loads((ROOT/'outputs/physics_v2/thermodynamics.json').read_text());native_loss=PhysicsLoss(meta,thermo)
-    model=MetricPredictor(ROOT/'outputs/shared_trajectory/model.json',heights).cuda();missing,extra=model.load_state_dict(torch.load(ROOT/'outputs/atlas_v3/taoca/best.pt',map_location='cuda',weights_only=True),strict=False);assert not extra and all(k.startswith('metric_encoder.') for k in missing);opt=torch.optim.AdamW(model.parameters(),lr=1e-4,weight_decay=1e-4);scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(opt,a.epochs,eta_min=5e-6)
+    meta=json.loads((ROOT/'datasets/joint_nearest/manifest.json').read_text());thermo=json.loads((ROOT/'configs/thermodynamics.json').read_text());native_loss=PhysicsLoss(meta,thermo)
+    model=AllocatedPredictor(ROOT/'configs/trajectory_model.json',heights).cuda();model.load_state_dict(torch.load(ROOT/'outputs/atlas_v3/taoca/best.pt',map_location='cuda',weights_only=True));opt=torch.optim.AdamW(model.parameters(),lr=1e-4,weight_decay=1e-4);scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(opt,a.epochs,eta_min=5e-6)
     # Cartesian is read-only and used only for fixed validation normalization.
-    cart=SpatialPredictor(ROOT/'outputs/shared_trajectory/model.json').cuda().eval();cart.load_state_dict(torch.load(ROOT/'outputs/physics_v2/cartesian/best.pt',map_location='cuda',weights_only=True));cds=AllocatedWindows(ROOT/'datasets/joint_nearest',ROOT/'datasets/fenli_paired','cartesian','val',heights=heights);baseline_sse=np.zeros(5);baseline_shock=np.zeros(5);baseline_n=baseline_sn=0
+    cart=SpatialPredictor(ROOT/'configs/trajectory_model.json').cuda().eval();cart.load_state_dict(torch.load(ROOT/'outputs/physics_v2/cartesian/best.pt',map_location='cuda',weights_only=True));cds=AllocatedWindows(ROOT/'datasets/joint_nearest',ROOT/'datasets/fenli_paired','cartesian','val',heights=heights);baseline_sse=np.zeros(5);baseline_shock=np.zeros(5);baseline_n=baseline_sn=0
     for i in range(1 if a.smoke else len(cds)):
-        item=cds[i];b={k:v[None].cuda() if torch.is_tensor(v) else v for k,v in item.items()};ops=load_window(ROOT/'outputs/physical_v7/operators',item['case'],item['start']);near,shock=regional_maps(b['target'],b['target_valid'])
+        item=cds[i];b={k:v[None].cuda() if torch.is_tensor(v) else v for k,v in item.items()};ops=load_window(BASE/'operators',item['case'],item['start']);near,shock=regional_maps(b['target'],b['target_valid'])
         with torch.no_grad():out=cart(*[b[k] for k in ['history','mach','pose_history','dt','last_xy','templates']],10,'cartesian',b['last_base'],b['last_valid'])
         for t,op in enumerate(ops):
             q=torch.as_tensor(op['q'],device='cuda',dtype=torch.long);valid=b['target_valid'][0,t].reshape(-1)[q]>.5;edge=shock[0,t,0].reshape(-1)[q]>.5;err=(out['fields'][0,t,0].reshape(5,-1)[:,q]-b['target'][0,t].reshape(5,-1)[:,q]).square()
             baseline_sse+=err[:,valid].double().sum(1).cpu().numpy();baseline_n+=int(valid.sum());baseline_shock+=err[:,valid&edge].double().sum(1).cpu().numpy();baseline_sn+=int((valid&edge).sum())
     baseline=np.sqrt(baseline_sse/max(1,baseline_n));shock_base=np.sqrt(baseline_shock/max(1,baseline_sn));del cart,out,b
-    baseline_run=json.loads((ROOT/'outputs/physics_v2/cartesian/run.json').read_text());shared=['taoca/spatial_physics.py','taoca/physics_losses.py','taoca/staged.py','taoca/joint.py','taoca/physics_data.py','taoca/domain_charts.py','datasets/joint_nearest/manifest.json','outputs/shared_trajectory/model.json']
+    baseline_run=json.loads((ROOT/'outputs/physics_v2/cartesian/run.json').read_text());shared=['taoca/spatial_physics.py','taoca/physics_losses.py','taoca/staged.py','taoca/joint.py','taoca/physics_data.py','taoca/domain_charts.py','datasets/joint_nearest/manifest.json']
     baseline_hashes={k.replace('\\','/'):v for k,v in baseline_run['source_sha256'].items()}
     for f in shared:assert hashlib.sha256((ROOT/f).read_bytes()).hexdigest()==baseline_hashes[f]
-    tracked=shared+['train_metric_v8.py','taoca/metric_features_v8.py','taoca/metric_model_v8.py','taoca/physical_supervision_v7.py','taoca/allocated_model_v3.py','outputs/physical_v7/operator_contract.json']
-    run=dict(heights=heights,parameters=sum(p.numel() for p in model.parameters()),sampled_points=123200,arguments=dict(epochs=a.epochs,seed=42,batch_size=1,lr=1e-4,smoke=a.smoke),initialization='atlas_v3/taoca/best.pt',initialization_sha256=hashlib.sha256((ROOT/'outputs/atlas_v3/taoca/best.pt').read_bytes()).hexdigest(),cartesian_checkpoint_sha256=hashlib.sha256((ROOT/'outputs/physics_v2/cartesian/best.pt').read_bytes()).hexdigest(),validation_cartesian_nrmse=baseline.tolist(),validation_cartesian_shock_nrmse=shock_base.tolist(),source_sha256={f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest() for f in tracked},protocol='Exploratory metric-conditioned TAOCA fine tuning; V7 objective and schedule unchanged; 816 extra zero-initialized feature-conditioning parameters; changed objective and additional budget, not a pure representation ablation. No Cartesian teacher outputs in train loss. No future geometry/field inputs. Exact legal evaluation inverse at fixed sparse points, 1/16 lattice with lead phase fixed before training.')
+    tracked=shared+['training/train_taoca_v7.py','taoca/physical_supervision_v7.py','taoca/allocated_model_v3.py','outputs/physical_v7/operator_contract.json']
+    run=dict(heights=heights,parameters=sum(p.numel() for p in model.parameters()),sampled_points=123200,arguments=dict(epochs=a.epochs,seed=42,batch_size=1,lr=1e-4,smoke=a.smoke),initialization='atlas_v3/taoca/best.pt',initialization_sha256=hashlib.sha256((ROOT/'outputs/atlas_v3/taoca/best.pt').read_bytes()).hexdigest(),cartesian_checkpoint_sha256=hashlib.sha256((ROOT/'outputs/physics_v2/cartesian/best.pt').read_bytes()).hexdigest(),validation_cartesian_nrmse=baseline.tolist(),validation_cartesian_shock_nrmse=shock_base.tolist(),source_sha256={f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest() for f in tracked},protocol='Exploratory TAOCA-specific inverse-consistent fine tuning; changed objective and additional budget, not a pure representation ablation. No Cartesian teacher outputs in train loss. No future geometry/field inputs. Exact legal evaluation inverse at fixed sparse points, 1/16 lattice with lead phase fixed before training.')
     if a.resume and (folder/'run.json').exists():assert json.loads((folder/'run.json').read_text())['source_sha256']==run['source_sha256']
     atomic_json(folder/'run.json',run);history=[];best=float('inf');start=1
     if a.resume and (folder/'last.pt').exists():
@@ -47,7 +50,7 @@ def main():
             for split in ['train','val']:
                 model.train(split=='train');parts={};count=0;sse=np.zeros(5);shock_sse=np.zeros(5);n=sn=0
                 for batch in loaders[split]:
-                    b={k:v.cuda() if torch.is_tensor(v) else v for k,v in batch.items()};ops=load_window(ROOT/'outputs/physical_v7/operators',batch['case'][0],int(batch['start'][0]));near,shock=regional_maps(b['target'],b['target_valid'])
+                    b={k:v.cuda() if torch.is_tensor(v) else v for k,v in batch.items()};ops=load_window(BASE/'operators',batch['case'][0],int(batch['start'][0]));near,shock=regional_maps(b['target'],b['target_valid'])
                     with torch.set_grad_enabled(split=='train'):
                         out=forward(model,b);loss,values=physical_loss(out,b,ops,near,shock);old,unused=native_loss(out,b,10);loss=loss+.05*old
                         if not torch.isfinite(loss):raise RuntimeError('Nonfinite V7 loss')
