@@ -17,8 +17,8 @@
 
 ## 部署
 
-- [`deployment/LINUX_5090.md`](deployment/LINUX_5090.md)：双 RTX 5090 环境准备与运行说明。
-- [`deployment/LINUX_JOINT.md`](deployment/LINUX_JOINT.md)：历史场—轨迹联合预测服务器协议。
+- [`deployment/LINUX_5090.md`](deployment/LINUX_5090.md)：旧数据打包版本的双 RTX 5090 指南，保留审计；不适用于当前源码-only 仓库。
+- [`deployment/LINUX_JOINT.md`](deployment/LINUX_JOINT.md)：旧数据打包版本的联合预测指南，保留审计；不适用于当前源码-only 仓库。
 
 ## 历史交付记录
 
@@ -26,3 +26,4 @@
 - [`reports/训练状态与最新入口_历史快照_2026-10-20.md`](reports/训练状态与最新入口_历史快照_2026-10-20.md)：保存当时的状态快照；当前训练状态必须以 `outputs/` 中机器生成的状态文件为准。
 
 > V2–V8 协议文件用于追溯不同实验版本，不表示这些版本都已完成正式评估。`outputs/` 与数据文件保存在本地且不随仓库发布；引用这些本地结果的旧实验图不会在 GitHub 上显示。
+
