@@ -1,0 +1,36 @@
+"""Evidence-grounded delivery report, generated after full preprocessing audit."""
+import json
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[1]
+
+
+def main():
+    meta=json.loads((ROOT/'datasets/fenli_paired/manifest.json').read_text());audit=json.loads((ROOT/'datasets/fenli_paired/audit.json').read_text())['summary'];smoke=json.loads((ROOT/'outputs/smoke_pipeline.json').read_text())
+    lines=['# TSTO 双体 TAOCA / Cartesian 数据与训练接口交付报告','',
+           '本次完成数据准备、几何往返审计与一步训练链路检查。正式收敛训练由服务器执行，当前没有模型精度优势或训练加速的结论。','',
+           '## 数据','',f'总计 {audit["frames"]} 帧，来自 E:/fenli。', '', '| 工况 | 帧数 |', '|---|---:|']
+    lines += [f'| {case} | {len(records)} |' for case,records in meta['cases'].items()]
+    lines += ['', '五个物理变量为压力、密度、温度和两个速度分量。原始 DAT 按文件名时间排序，按 smj/xmj 名称识别壁面，保留所有流体单元区。两组各 49,152 采样点，使用同一原始 P1 插值和训练帧归一化。', '',
+              '每条轨迹前 60 帧为训练，接续 20 帧为验证，其余为测试目标。读 20 帧预测 10 帧，所有目标均在自身划分内；历史可以来自过去划分。测试按物理帧去重，不属于长期自主滚动验证。', '',
+              '## 几何与往返结果','', '以下 NRMSE 分母为训练源节点标准差；按各帧共同物理覆盖区计算后取帧均值，不是面积积分误差。', '',
+              '| 表示 | 原始节点覆盖率范围 | 五变量平均 NRMSE |','|---|---|---|']
+    for route,r in audit['roundtrip'].items():
+        lines.append(f'| {route} | {r["coverage_range"][0]:.4%}–{r["coverage_range"][1]:.4%} | '+', '.join(f'{v:.4%}' for v in r['mean_normalized_rmse'])+' |')
+    lines += ['',f'两组共同覆盖率范围：{audit["common_coverage_range"][0]:.4%}–{audit["common_coverage_range"][1]:.4%}。未覆盖节点不外推补齐，覆盖差异另行报告。','',
+              '## 训练链路验证','',f'设备：{smoke["gpu"]}。两条路线均完成真实连续 30 帧的 20→10 一步优化、有限梯度检查和原始网格回映射。两组各 2,959,365 参数。此结果仅证明接口可运行，不能用于比较收敛精度或速度。','',
+              '复用原 V2.0 的 FNO 编码器和时序 Transformer，新增共享尺寸适配解码器、图角色编码和跨图潜变量平均交换；不使用未经坐标变换的 Cartesian PDE 损失。','',
+              '## 使用与结果解释','', '服务器解压后按 README 安装相应 CUDA 的 PyTorch，执行 `bash run_dual_gpu.sh`。GPU 0 跑 Cartesian，GPU 1 跑 TAOCA。输出训练时间、验证损失、显存、物理节点测试误差、真实场往返误差、最后帧保持基线和可复查 NPZ 快照。','',
+              '训练损失的空间采样分布不同，不能直接以较小训练 MSE 判定方法更好。应比较共同物理节点误差，并同时查看覆盖率、映射误差和成本。正式科研结论需重复随机种子，交换 GPU，报告方差。','',
+              '## 局限','',
+              '- 本实验依赖目标时刻几何坐标和掩膜，属于已知运动几何的条件预测，不验证运动轨迹预测。',
+              '- 固定第一帧 outer 包络可能与后期物体相交；相关 donor 已屏蔽，不能宣称全时域严格外环或全域覆盖。',
+              '- O 图按第一帧角点分配并依赖相同边界拓扑；当前几何时序通过不代表强旋转或重编号鲁棒。',
+              '- 线性插值和分片融合不严格守恒；正离散单元和有限权重也不等于求解器级 GCL。',
+              '- 共同覆盖区仍遗漏部分近壁节点；必须连同覆盖率解读误差，后续需近壁与激波分区指标。',
+              '- 五条相关 TSTO 轨迹的时间划分不证明跨工况、跨几何或长期滚动泛化。',
+              '- 同点数不代表同物理分辨率；当前图册配置可能在部分变量上比 Cartesian 更差，不能预设 TAOCA 优越。',
+              '- 节点权重统计偏向密网格区，不等同于流体面积权重指标。','']
+    (ROOT/'数据与训练接口交付报告.md').write_text('\n'.join(lines),encoding='utf-8')
+
+
+if __name__=='__main__':main()
