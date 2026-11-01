@@ -10,7 +10,7 @@
 
 四张图独立误差使用各自覆盖区，不能把覆盖不同区域的图直接按一个NRMSE数值排名。图件和数据见`outputs/atlas_v3/diagnostic_figures/`、`fusion_diagnosis.json`、`validation_native/`。
 
-![验证集融合对照](outputs/atlas_v3/diagnostic_figures/validation_fusion.png)
+验证集融合诊断图保存在本机 `outputs/atlas_v3/diagnostic_figures/validation_fusion.png`；生成图件不纳入代码仓库。
 
 ## 新分配及其依据
 
@@ -30,7 +30,7 @@
 
 这些是“真值→图册→物理网格”的表示诊断，不是神经网络预测提升，不是误差下界，也不能与预测RMSE简单相减。分配、几何尺度变化与几何质量融合权重之间存在联动，不能把收益全部归因于某一个单独因素。
 
-![同域真值往返误差比较](outputs/atlas_v3/diagnostic_figures/validation_allocation_roundtrip.png)
+同域真值往返误差图保存在本机 `outputs/atlas_v3/diagnostic_figures/validation_allocation_roundtrip.png`；生成图件不纳入代码仓库。
 
 新方案是**静态固定预算分配**，保留历史逻辑相位；没有使用未来真实激波位置布点，也没有宣称已经完成动态激波自适应网格。未来几何仍由共享的历史轨迹代理推进。
 

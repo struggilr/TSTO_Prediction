@@ -1,4 +1,6 @@
-# 历史流场与轨迹联合预测
+# 历史部署说明：流场与轨迹联合预测（旧打包版本）
+
+> **仅供追溯，不是当前 GitHub 源码版的启动指南。** 本文依赖未发布的 `joint_nearest` / 配对数据缓存与旧 zip 打包结构。公开仓库只含源码，不含 HDF5/NPZ 数据或权重。
 
 只上传FNOTransfomer_TAOCA_joint_server.zip。旧FNOTransfomer_TAOCA_server.zip不是本实验。
 
