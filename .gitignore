@@ -1,0 +1,16 @@
+datasets/
+outputs/
+*.h5
+*.hdf5
+*.npz
+*.npy
+*.pt
+*.pth
+*.ckpt
+*.log
+*.zip
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.partial

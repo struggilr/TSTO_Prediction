@@ -1,9 +1,0 @@
-datasets/
-outputs/
-*.pt
-*.pth
-*.h5
-*.npz
-*.npy
-*.log
-__pycache__/
